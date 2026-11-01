@@ -1,0 +1,193 @@
+name: iOS IPA Signer Engine
+
+on:
+  repository_dispatch:
+    types: [sign-ipa]
+  workflow_dispatch:
+    inputs:
+      job_id:
+        description: 'Unique Job ID'
+        required: true
+      chat_id:
+        description: 'Telegram Chat ID'
+        required: true
+      p12_key:
+        description: 'R2 Key for .p12'
+        required: true
+      p12_password:
+        description: 'Password for .p12'
+        required: false
+      provision_key:
+        description: 'R2 Key for .mobileprovision'
+        required: true
+      ipa_url:
+        description: 'Direct IPA Download URL or R2 Key'
+        required: true
+      app_url:
+        description: 'Cloudflare Worker URL'
+        required: true
+      app_name:
+        description: 'Custom App Name'
+        required: false
+      bundle_id:
+        description: 'Custom Bundle Identifier'
+        required: false
+
+jobs:
+  sign:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Install Dependencies & zsign
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y openssl libssl-dev libcrypto++-dev zip unzip curl jq awscli
+          # Check if zsign is in apt, otherwise compile
+          if ! command -v zsign &> /dev/null; then
+            echo "Installing zsign..."
+            sudo apt-get install -y zsign || {
+              echo "Building zsign from source..."
+              git clone https://github.com/zhlynn/zsign.git /tmp/zsign
+              cd /tmp/zsign
+              g++ *.cpp common/*.cpp -lcrypto -O3 -o /usr/local/bin/zsign
+            }
+          fi
+          zsign -v || true
+
+      - name: Configure S3 / R2 CLI
+        run: |
+          aws configure set aws_access_key_id "${{ secrets.R2_ACCESS_KEY_ID }}"
+          aws configure set aws_secret_access_key "${{ secrets.R2_SECRET_ACCESS_KEY }}"
+          aws configure set default.region auto
+
+      - name: Notify Telegram (In Progress)
+        run: |
+          JOB_ID="${{ github.event.client_payload.job_id || inputs.job_id }}"
+          CHAT_ID="${{ github.event.client_payload.chat_id || inputs.chat_id }}"
+          MSG_ID="${{ github.event.client_payload.message_id }}"
+          BOT_TOKEN="${{ secrets.TELEGRAM_BOT_TOKEN }}"
+          
+          TEXT="⚡ <b>ដំណើរការ Sign កំពុងដំណើរការ...</b>%0A%0A📦 Job ID: <code>${JOB_ID}</code>%0A⏳ សូមរង់ចាំប្រហែល ៣០-៦០ វិនាទី..."
+          
+          if [ -n "$MSG_ID" ]; then
+            curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/editMessageText" \
+              -d "chat_id=${CHAT_ID}" \
+              -d "message_id=${MSG_ID}" \
+              -d "text=${TEXT}" \
+              -d "parse_mode=HTML" || true
+          fi
+
+      - name: Download Files
+        run: |
+          mkdir -p workspace
+          cd workspace
+
+          ENDPOINT="https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com"
+          BUCKET="${{ secrets.R2_BUCKET_NAME || 'ipa-storage' }}"
+
+          P12_KEY="${{ github.event.client_payload.p12_key || inputs.p12_key }}"
+          PROV_KEY="${{ github.event.client_payload.provision_key || inputs.provision_key }}"
+          IPA_KEY="${{ github.event.client_payload.ipa_key }}"
+          IPA_URL="${{ github.event.client_payload.ipa_url || inputs.ipa_url }}"
+
+          echo "Downloading certificate..."
+          aws s3 cp "s3://${BUCKET}/${P12_KEY}" cert.p12 --endpoint-url "$ENDPOINT"
+
+          echo "Downloading provisioning profile..."
+          aws s3 cp "s3://${BUCKET}/${PROV_KEY}" profile.mobileprovision --endpoint-url "$ENDPOINT"
+
+          echo "Downloading IPA file..."
+          if [ -n "$IPA_KEY" ]; then
+            aws s3 cp "s3://${BUCKET}/${IPA_KEY}" unsigned.ipa --endpoint-url "$ENDPOINT"
+          elif [ -n "$IPA_URL" ]; then
+            curl -L -o unsigned.ipa "$IPA_URL"
+          else
+            echo "Error: No IPA source provided"
+            exit 1
+          fi
+
+      - name: Run zsign
+        run: |
+          cd workspace
+          P12_PASS="${{ github.event.client_payload.p12_password || inputs.p12_password }}"
+          APP_NAME="${{ github.event.client_payload.app_name || inputs.app_name }}"
+          BUNDLE_ID="${{ github.event.client_payload.bundle_id || inputs.bundle_id }}"
+
+          CMD="zsign -k cert.p12 -m profile.mobileprovision -o signed.ipa"
+          if [ -n "$P12_PASS" ]; then
+            CMD="$CMD -p '$P12_PASS'"
+          fi
+          if [ -n "$APP_NAME" ]; then
+            CMD="$CMD -n '$APP_NAME'"
+          fi
+          if [ -n "$BUNDLE_ID" ]; then
+            CMD="$CMD -b '$BUNDLE_ID'"
+          fi
+
+          CMD="$CMD unsigned.ipa"
+          echo "Executing: $CMD"
+          eval $CMD
+
+          ls -lh signed.ipa
+
+      - name: Upload Signed IPA to R2
+        run: |
+          cd workspace
+          JOB_ID="${{ github.event.client_payload.job_id || inputs.job_id }}"
+          ENDPOINT="https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com"
+          BUCKET="${{ secrets.R2_BUCKET_NAME || 'ipa-storage' }}"
+
+          aws s3 cp signed.ipa "s3://${BUCKET}/signed/${JOB_ID}.ipa" --endpoint-url "$ENDPOINT"
+
+      - name: Notify Telegram (Success)
+        if: success()
+        run: |
+          JOB_ID="${{ github.event.client_payload.job_id || inputs.job_id }}"
+          CHAT_ID="${{ github.event.client_payload.chat_id || inputs.chat_id }}"
+          MSG_ID="${{ github.event.client_payload.message_id }}"
+          APP_URL="${{ github.event.client_payload.app_url || inputs.app_url }}"
+          APP_NAME="${{ github.event.client_payload.app_name || inputs.app_name || 'iOS App' }}"
+          BOT_TOKEN="${{ secrets.TELEGRAM_BOT_TOKEN }}"
+
+          INSTALL_URL="${APP_URL}/install/${JOB_ID}"
+
+          TEXT="✅ <b>ចុះហត្ថលេខា (Sign) ជោគជ័យ!</b>%0A%0A📱 <b>ឈ្មោះកម្មវិធី:</b> ${APP_NAME}%0A📦 <b>Job ID:</b> <code>${JOB_ID}</code>%0A%0A👇 <b>សូមចុចប៊ូតុងខាងក្រោមដើម្បីដំឡើងតាម Safari:</b>"
+
+          KEYBOARD='{"inline_keyboard":[[{"text":"📲 Install App (ដំឡើង)","url":"'"${INSTALL_URL}"'"}]]}'
+
+          if [ -n "$MSG_ID" ]; then
+            # Delete old progress message or edit
+            curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/editMessageText" \
+              -d "chat_id=${CHAT_ID}" \
+              -d "message_id=${MSG_ID}" \
+              -d "text=${TEXT}" \
+              -d "parse_mode=HTML" \
+              -d "reply_markup=${KEYBOARD}" || true
+          else
+            curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
+              -d "chat_id=${CHAT_ID}" \
+              -d "text=${TEXT}" \
+              -d "parse_mode=HTML" \
+              -d "reply_markup=${KEYBOARD}"
+          fi
+
+      - name: Notify Telegram (Failure)
+        if: failure()
+        run: |
+          JOB_ID="${{ github.event.client_payload.job_id || inputs.job_id }}"
+          CHAT_ID="${{ github.event.client_payload.chat_id || inputs.chat_id }}"
+          MSG_ID="${{ github.event.client_payload.message_id }}"
+          BOT_TOKEN="${{ secrets.TELEGRAM_BOT_TOKEN }}"
+
+          TEXT="❌ <b>ការចុះហត្ថលេខា (Sign) បរាជ័យ!</b>%0A%0A📦 Job ID: <code>${JOB_ID}</code>%0A⚠️ មូលហេតុអាចមកពី:%0A- Password Cert មិនត្រឹមត្រូវ%0A- Certificate ផុតកំណត់ ឬត្រូវ Apple Revoke%0A- UDID របស់ទូរសព្ទមិនមានក្នុង Provisioning Profile"
+
+          if [ -n "$MSG_ID" ]; then
+            curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/editMessageText" \
+              -d "chat_id=${CHAT_ID}" \
+              -d "message_id=${MSG_ID}" \
+              -d "text=${TEXT}" \
+              -d "parse_mode=HTML" || true
+          fi
+
