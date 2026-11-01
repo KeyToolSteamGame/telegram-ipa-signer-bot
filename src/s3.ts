@@ -22,10 +22,11 @@ export async function createPresignedUploadUrl(params: {
   const command = new PutObjectCommand({
     Bucket: params.bucketName,
     Key: params.key,
-    ContentType: params.contentType || 'application/octet-stream',
+    ...(params.contentType ? { ContentType: params.contentType } : {}),
   });
 
   return await getSignedUrl(client, command, {
     expiresIn: params.expiresInSeconds || 3600, // 1 hour
   });
 }
+

@@ -621,7 +621,7 @@ export function renderWebApp(params: {
             if (xhr.status >= 200 && xhr.status < 300) resolve();
             else reject(new Error('Upload failed with status ' + xhr.status));
           };
-          xhr.onerror = () => reject(new Error('Network error during upload'));
+          xhr.onerror = () => reject(new Error('Network error (សូមពិនិត្យមើល CORS លើ Cloudflare R2 Bucket "ipa-storage")'));
           xhr.send(selectedIpaFile);
         });
 
@@ -681,3 +681,4 @@ export function renderWebApp(params: {
 </body>
 </html>`;
 }
+
