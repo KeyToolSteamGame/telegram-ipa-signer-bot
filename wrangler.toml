@@ -14,4 +14,5 @@ bucket_name = "ipa-storage"
 [vars]
 GITHUB_REPO = "KeyToolSteamGame/telegram-ipa-signer-bot"
 APP_URL = "https://telegram-ipa-signer-bot.chhunjp.workers.dev"
+R2_ACCOUNT_ID = "d02ea3805efd909e0451459a19c09dd9"
 

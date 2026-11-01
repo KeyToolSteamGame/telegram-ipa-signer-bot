@@ -2,8 +2,11 @@ export interface Env {
   IPA_BUCKET: R2Bucket;
   TELEGRAM_BOT_TOKEN: string;
   GITHUB_TOKEN: string;
-  GITHUB_REPO: string; // e.g. "username/telegram-ipa-signer-bot"
-  APP_URL: string;     // e.g. "https://your-worker.workers.dev"
+  GITHUB_REPO: string; // e.g. "KeyToolSteamGame/telegram-ipa-signer-bot"
+  APP_URL: string;     // e.g. "https://telegram-ipa-signer-bot.chhunjp.workers.dev"
+  R2_ACCOUNT_ID?: string;
+  R2_ACCESS_KEY_ID?: string;
+  R2_SECRET_ACCESS_KEY?: string;
 }
 
 export interface UserCertMeta {

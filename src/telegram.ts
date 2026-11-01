@@ -155,20 +155,20 @@ export class TelegramBot {
   }
 
   private async sendWelcome(chatId: number): Promise<void> {
+    const webAppUrl = `${this.env.APP_URL}/app`;
     const text = `🎉 <b>សូមស្វាគមន៍មកកាន់ iOS IPA Signer & Installer Bot!</b>
 
 Bot នេះជួយអ្នក Sign ឯកសារ IPA ជាមួយ Apple Developer Certificate ផ្ទាល់ខ្លួនរបស់អ្នក និងបង្កើត Link ដំឡើងលើ iPhone/iPad ដោយផ្ទាល់ (OTA)។
 
-📌 <b>របៀបចាប់ផ្តើម៖</b>
-1️⃣ ផ្ញើឯកសារ <b>.p12</b> របស់អ្នកមកកាន់ទីនេះ
-2️⃣ កំណត់ Password ដោយវាយ: <code>/setpass YOUR_PASSWORD</code>
-3️⃣ ផ្ញើឯកសារ <b>.mobileprovision</b>
-4️⃣ ផ្ញើឯកសារ <b>.ipa</b> ឬ Direct Link: <code>/sign https://.../app.ipa</code>
+📌 <b>វិធីងាយស្រួល ២ យ៉ាង៖</b>
+1️⃣ <b>ប្រើ Web App (ណែនាំ):</b> ចុចប៊ូតុងខាងក្រោមដើម្បី Upload ឯកសារធំៗ (ដល់ 5GB) ផ្ទាល់ពីទូរសព្ទ។
+2️⃣ <b>ប្រើក្នុង Telegram:</b> ផ្ញើឯកសារ .p12, .mobileprovision និងផ្ញើ Link IPA ដោយវាយ: <code>/sign https://...</code>
 
 ចុច /help ដើម្បីអានការណែនាំបន្ថែម!`;
 
     const keyboard = {
       inline_keyboard: [
+        [{ text: '🚀 បើកផ្ទាំង Web App (Upload ដល់ 5GB)', web_app: { url: webAppUrl } }],
         [{ text: '📜 ពិនិត្យមើល Cert របស់ខ្ញុំ', callback_data: 'check_cert' }],
         [{ text: '📖 ការណែនាំ (Help)', callback_data: 'help' }],
       ],
@@ -291,9 +291,15 @@ ${meta.hasP12 && meta.hasProvision ? '✨ <b>អ្នករួចរាល់�
     // Handle .ipa file direct upload (if under 20MB)
     if (fileName.endsWith('.ipa')) {
       if ((doc.file_size || 0) > 20 * 1024 * 1024) {
+        const webAppUrl = `${this.env.APP_URL}/app`;
         await this.sendMessage(
           chatId,
-          '⚠️ <b>ឯកសារធំពេក (លើសពី 20MB)!</b>\n\nTelegram មិនអនុញ្ញាតឱ្យ Bot ទាញយកឯកសារផ្ទាល់លើសពី 20MB ឡើយ។\n👉 សូម Upload ឯកសារ IPA របស់អ្នកទៅកាន់ Google Drive / Dropbox / Direct Link រួចផ្ញើមក Bot តាមទម្រង់:\n<code>/sign DIRECT_LINK_HERE</code>'
+          `⚠️ <b>ឯកសារធំពេក (${((doc.file_size || 0) / (1024 * 1024)).toFixed(1)} MB)!</b>\n\nTelegram មិនអនុញ្ញាតឱ្យ Bot ទាញយកឯកសារលើសពី 20MB ផ្ទាល់ក្នុង Chat ឡើយ។\n\n✨ <b>ដំណោះស្រាយងាយស្រួលបំផុត៖</b>\n👉 ចុចប៊ូតុងខាងក្រោមដើម្បីបើក <b>Web App</b> រួច Upload ឯកសារនេះផ្ទាល់ (Support ដល់ 5GB)!\n\n(ឬ Upload ទៅ Google Drive / Mediafire រួចវាយ: <code>/sign LINK</code>)`,
+          {
+            inline_keyboard: [
+              [{ text: '🚀 បើក Web App ដើម្បី Upload (ដល់ 5GB)', web_app: { url: webAppUrl } }],
+            ],
+          }
         );
         return;
       }
