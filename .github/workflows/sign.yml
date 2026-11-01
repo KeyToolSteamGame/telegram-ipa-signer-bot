@@ -37,6 +37,16 @@ jobs:
   sign:
     runs-on: ubuntu-latest
     steps:
+      - name: Free Disk Space for Large Files (up to 5GB IPAs)
+        run: |
+          echo "Freeing disk space for large IPA processing..."
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /usr/local/share/boost
+          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+          df -h
+
       - name: Checkout Repository
         uses: actions/checkout@v4
 
@@ -115,7 +125,7 @@ jobs:
           APP_NAME="${{ github.event.client_payload.app_name || inputs.app_name }}"
           BUNDLE_ID="${{ github.event.client_payload.bundle_id || inputs.bundle_id }}"
 
-          CMD="zsign -k cert.p12 -m profile.mobileprovision -o signed.ipa"
+          CMD="zsign -k cert.p12 -m profile.mobileprovision -o signed.ipa -z 1"
           if [ -n "$P12_PASS" ]; then
             CMD="$CMD -p '$P12_PASS'"
           fi
