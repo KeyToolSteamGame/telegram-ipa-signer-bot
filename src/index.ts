@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { Env, TelegramUpdate } from './types';
 import { TelegramBot } from './telegram';
 import { generateManifestXml } from './manifest';
-import { renderInstallPage } from './views/install.html';
+import { renderInstallPage } from './views/installPage';
 
 const app = new Hono<{ Bindings: Env }>();
 

@@ -12,6 +12,6 @@ bucket_name = "ipa-storage"
 # For sensitive values (TELEGRAM_BOT_TOKEN, GITHUB_TOKEN), 
 # use `wrangler secret put <NAME>` instead of plain text here.
 [vars]
-GITHUB_REPO = "keytoolsteamgame/telegram-ipa-signer-bot"
-APP_URL = "https://your-worker.your-subdomain.workers.dev"
+GITHUB_REPO = "KeyToolSteamGame/telegram-ipa-signer-bot"
+APP_URL = "https://telegram-ipa-signer-bot.chhunjp.workers.dev"
 
